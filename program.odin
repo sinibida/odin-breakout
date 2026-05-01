@@ -3,6 +3,7 @@ package main
 import "core:math"
 import "core:math/rand"
 import "core:slice"
+import "core:strconv"
 import "phys"
 import rl "vendor:raylib"
 
@@ -139,7 +140,7 @@ main :: proc() {
 					game_state = Game_State_Shooting{}
 				}
 			case Game_State_Shooting:
-				// Collision Check
+				// Board collision
 				if col, ok := phys.get_collision_ball_rectangle_inner(
 					ball.pos,
 					ball.radius,
@@ -148,6 +149,7 @@ main :: proc() {
 					phys.handle_ball_collision(&ball.pos, &ball.dir, col)
 				}
 
+				// Bar collision
 				if !bar.no_collision {
 					if col, ok := phys.get_collision_ball_rectangle(
 						ball.pos,
@@ -158,6 +160,7 @@ main :: proc() {
 					}
 				}
 
+				// Block collision
 				for &block, idx in blocks {
 					if col, ok := phys.get_collision_ball_rectangle(
 						ball.pos,
@@ -165,7 +168,8 @@ main :: proc() {
 						block.rect,
 					); ok {
 						phys.handle_ball_collision(&ball.pos, &ball.dir, col)
-						append(&blocks_remove_queue, idx)
+						block.health -= 1
+						if block.health == 0 do append(&blocks_remove_queue, idx)
 					}
 				}
 
@@ -256,7 +260,11 @@ main :: proc() {
 			rl.ClearBackground(rl.RAYWHITE)
 
 			for block in blocks {
-				rl.DrawRectangleGradientEx(block.rect, rl.RED, rl.RAYWHITE, rl.RAYWHITE, rl.RED)
+				health_lost_rate := 1 - (f32(block.health) / f32(block.max_health))
+				fill_rect := block.rect
+				fill_rect.x += block.rect.width * 0.5 * health_lost_rate
+				fill_rect.width -= block.rect.width * health_lost_rate
+				rl.DrawRectangleGradientEx(fill_rect, rl.RED, rl.RAYWHITE, rl.RAYWHITE, rl.RED)
 				rl.DrawRectangleLinesEx(block.rect, 1, rl.RED)
 			}
 
