@@ -54,6 +54,19 @@ main :: proc() {
 
 
 	for !rl.WindowShouldClose() {
+		bar_rectangle := rl.Rectangle {
+			bar_pos.x - bar_size.x / 2,
+			bar_pos.y - bar_size.y / 2,
+			bar_size.x,
+			bar_size.y,
+		}
+		board_rectangle := rl.Rectangle {
+			board_x_min,
+			board_y_min,
+			board_x_max - board_x_min,
+			board_y_max - board_y_min,
+		}
+
 		// Update
 		{
 			frame_time := rl.GetFrameTime()
@@ -75,31 +88,12 @@ main :: proc() {
 			if bar_pos.x == 200 do bar_vel_x = bar_vel_x > 0 ? 0 : bar_vel_x
 			if bar_pos.x == -200 do bar_vel_x = bar_vel_x < 0 ? 0 : bar_vel_x
 
-			bar_rectangle: rl.Rectangle
-			{
-				pos := bar_pos - bar_size / 2
-				size := bar_size
-				bar_rectangle = {pos.x, pos.y, size.x, size.y}
-			}
 
 			ball_pos += ball_dir * ball_speed * frame_time
 
-			if offset := (ball_pos.x - ball_radius) - board_x_min; offset < 0 {
-				ball_pos.x += -offset * 2
-				ball_dir *= {-1, 1}
-			}
-			if offset := (ball_pos.x + ball_radius) - board_x_max; offset > 0 {
-				ball_pos.x += -offset * 2
-				ball_dir *= {-1, 1}
-			}
-			if offset := (ball_pos.y - ball_radius) - board_y_min; offset < 0 {
-				ball_pos.y += -offset * 2
-				ball_dir *= {1, -1}
-			}
-			if offset := (ball_pos.y + ball_radius) - board_y_max; offset > 0 {
-				// DEAD!
-				ball_pos.y += -offset * 2
-				ball_dir *= {1, -1}
+			if col, ok := phys.get_collision_ball_rectangle_inner(ball_pos, ball_radius, board_rectangle);
+			   ok {
+				phys.handle_ball_collision(&ball_pos, &ball_dir, col)
 			}
 
 			if col, ok := phys.get_collision_ball_rectangle(ball_pos, ball_radius, bar_rectangle);
@@ -136,11 +130,7 @@ main :: proc() {
 			rl.DrawCircleV(ball_pos, ball_radius, rl.RED)
 			rl.DrawRectangleV(bar_pos - bar_size / 2, bar_size, rl.RED)
 
-			rl.DrawRectangleLinesEx(
-				{board_x_min, board_y_min, board_x_max - board_x_min, board_y_max - board_y_min},
-				1,
-				rl.RED,
-			)
+			rl.DrawRectangleLinesEx(board_rectangle, 1, rl.RED)
 
 			rl.EndMode2D()
 			rl.EndDrawing()

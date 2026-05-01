@@ -44,6 +44,60 @@ handle_corner :: proc(
 	return
 }
 
+
+get_collision_ball_rectangle_inner :: proc(
+	center: rl.Vector2,
+	radius: f32,
+	rectangle: rl.Rectangle,
+) -> (
+	col: Ball_Rectangle_Collision,
+	ok: bool = false,
+) {
+	x_min := rectangle.x
+	y_min := rectangle.y
+	x_max := rectangle.x + rectangle.width
+	y_max := rectangle.y + rectangle.height
+
+	x_rmin := x_min + radius
+	y_rmin := y_min + radius
+	x_rmax := x_max - radius
+	y_rmax := y_max - radius
+
+	// Fast Exit (Bounding Box check)
+	if center.x > x_rmin && center.x < x_rmax && center.y > y_rmin && center.y < y_rmax {
+		return
+	}
+
+	// UD Edge
+	if center.y >= y_rmax {
+		corner := rl.Vector2{center.x, y_max}
+		col, _ = handle_corner(corner, center, radius)
+		ok = true
+		return
+	}; if y_rmin >= center.y {
+		corner := rl.Vector2{center.x, y_min}
+		col, _ = handle_corner(corner, center, radius)
+		ok = true
+		return
+	}
+	// LR Edge
+	if center.x >= x_rmax {
+		corner := rl.Vector2{x_max, center.y}
+		col_temp, _ := handle_corner(corner, center, radius)
+		col = col_temp
+		ok = true
+		return
+	}; if x_rmin >= center.x {
+		corner := rl.Vector2{x_min, center.y}
+		col, _ = handle_corner(corner, center, radius)
+		ok = true
+		return
+	}
+
+	return
+}
+
+
 get_collision_ball_rectangle :: proc(
 	center: rl.Vector2,
 	radius: f32,
