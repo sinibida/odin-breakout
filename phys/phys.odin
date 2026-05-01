@@ -53,6 +53,10 @@ get_collision_ball_rectangle_inner :: proc(
 	col: Ball_Rectangle_Collision,
 	ok: bool = false,
 ) {
+	if rectangle.width <= rl.EPSILON || rectangle.height <= rl.EPSILON {
+		return
+	}
+
 	x_min := rectangle.x
 	y_min := rectangle.y
 	x_max := rectangle.x + rectangle.width
