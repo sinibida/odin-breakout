@@ -1,6 +1,7 @@
 package main
 
 import "core:math"
+import "core:math/rand"
 import "core:slice"
 import "phys"
 import rl "vendor:raylib"
@@ -14,6 +15,7 @@ Game_State_Aiming :: struct {
 INITIAL_AIM_SPEED: f32 = 2
 INITIAL_AIM_RANGE: f32 = math.PI * 0.45
 INITIAL_AIM_DIR: f32 = -1
+
 Game_State_Shooting :: struct {}
 
 Game_State :: union {
@@ -36,6 +38,12 @@ Bar :: struct {
 	speed:        f32,
 	drain_speed:  f32,
 	no_collision: bool,
+}
+
+Block :: struct {
+	rect:       rl.Rectangle,
+	max_health: i32,
+	health:     i32,
 }
 
 WINDOW_WIDTH :: 560
@@ -80,25 +88,15 @@ main :: proc() {
 	board_y_max: f32 = 200
 
 	// LATER: optimization, use Lilnked List instead.
-	blocks := [dynamic; 128]rl.Rectangle {
-		{-100, -100, 40, 20},
-		{-50, -100, 40, 20},
-		{0, -100, 40, 20},
-		{50, -100, 40, 20},
-		{100, -100, 40, 20},
-		{-100, -70, 40, 20},
-		{-50, -70, 40, 20},
-		{0, -70, 40, 20},
-		{50, -70, 40, 20},
-		{100, -70, 40, 20},
-		{-100, -40, 40, 20},
-		{-50, -40, 40, 20},
-		{0, -40, 40, 20},
-		{50, -40, 40, 20},
-		{100, -40, 40, 20},
-	}
+	blocks := [dynamic; 128]Block{}
 	blocks_remove_queue := [dynamic; 128]int{}
 
+	block_gen_prob: f32 = 0.7
+	block_gen_width: f32 = 40
+	block_gen_height: f32 = 20
+	block_gen_gap: f32 = 10
+	block_gen_col_cnt: i32 = 6
+	block_gen_y_min: f32 = -100
 
 	for !rl.WindowShouldClose() {
 		bar_rectangle := rl.Rectangle {
@@ -161,8 +159,11 @@ main :: proc() {
 				}
 
 				for &block, idx in blocks {
-					if col, ok := phys.get_collision_ball_rectangle(ball.pos, ball.radius, block);
-					   ok {
+					if col, ok := phys.get_collision_ball_rectangle(
+						ball.pos,
+						ball.radius,
+						block.rect,
+					); ok {
 						phys.handle_ball_collision(&ball.pos, &ball.dir, col)
 						append(&blocks_remove_queue, idx)
 					}
@@ -196,13 +197,38 @@ main :: proc() {
 				// Ball movement
 				ball.pos += ball.dir * ball.speed * frame_time
 
-				// Reset ball & bar on death
+				// STATE CHANGE: On Ball Death
 				if ball.pos.y > board_y_max {
+					// Reset bar & ball
 					ball.pos = rl.Vector2{0, 130}
 					bar.pos.x = 0
 					bar.vel_x = 0
 					bar.size.x = 100
 					bar.no_collision = false
+
+					// push a row of blocks
+					block_gen_full_width :=
+						block_gen_width * f32(block_gen_col_cnt) +
+						block_gen_gap * f32(block_gen_col_cnt - 1)
+					block_gen_x_min := -block_gen_full_width * 0.5
+					block_gen_x_interval := block_gen_width + block_gen_gap
+					block_gen_y_push := block_gen_height + block_gen_gap
+					for &block in blocks {
+						block.rect.y += block_gen_y_push
+					}
+					for i in 0 ..< block_gen_col_cnt {
+						rect := rl.Rectangle {
+							block_gen_x_min + block_gen_x_interval * f32(i),
+							block_gen_y_min,
+							block_gen_width,
+							block_gen_height,
+						}
+						if rand.float32() < block_gen_prob {
+							append(&blocks, Block{rect = rect, health = 2, max_health = 2})
+						}
+					}
+
+					// update state
 					game_state = Game_State_Aiming {
 						aim_angle = 0,
 						aim_speed = INITIAL_AIM_SPEED,
@@ -230,8 +256,8 @@ main :: proc() {
 			rl.ClearBackground(rl.RAYWHITE)
 
 			for block in blocks {
-				rl.DrawRectangleGradientEx(block, rl.RED, rl.RAYWHITE, rl.RAYWHITE, rl.RED)
-				rl.DrawRectangleLinesEx(block, 1, rl.RED)
+				rl.DrawRectangleGradientEx(block.rect, rl.RED, rl.RAYWHITE, rl.RAYWHITE, rl.RED)
+				rl.DrawRectangleLinesEx(block.rect, 1, rl.RED)
 			}
 
 			rl.DrawCircleV(ball.pos, ball.radius, rl.RED)
