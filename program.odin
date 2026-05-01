@@ -29,12 +29,13 @@ Ball :: struct {
 }
 
 Bar :: struct {
-	pos:         rl.Vector2,
-	size:        rl.Vector2,
-	vel_x:       f32,
-	acc_x:       f32,
-	speed:       f32,
-	drain_speed: f32,
+	pos:          rl.Vector2,
+	size:         rl.Vector2,
+	vel_x:        f32,
+	acc_x:        f32,
+	speed:        f32,
+	drain_speed:  f32,
+	no_collision: bool,
 }
 
 WINDOW_WIDTH :: 560
@@ -64,12 +65,13 @@ main :: proc() {
 	}
 
 	bar := Bar {
-		pos         = rl.Vector2{0, 150},
-		size        = rl.Vector2{100, 10},
-		vel_x       = 0,
-		acc_x       = 5000,
-		speed       = 500,
-		drain_speed = 10,
+		pos          = rl.Vector2{0, 150},
+		size         = rl.Vector2{100, 10},
+		vel_x        = 0,
+		acc_x        = 5000,
+		speed        = 500,
+		drain_speed  = 10,
+		no_collision = false,
 	}
 
 	board_x_min: f32 = -250
@@ -148,12 +150,14 @@ main :: proc() {
 					phys.handle_ball_collision(&ball.pos, &ball.dir, col)
 				}
 
-				if col, ok := phys.get_collision_ball_rectangle(
-					ball.pos,
-					ball.radius,
-					bar_rectangle,
-				); ok {
-					phys.handle_ball_collision(&ball.pos, &ball.dir, col)
+				if !bar.no_collision {
+					if col, ok := phys.get_collision_ball_rectangle(
+						ball.pos,
+						ball.radius,
+						bar_rectangle,
+					); ok {
+						phys.handle_ball_collision(&ball.pos, &ball.dir, col)
+					}
 				}
 
 				for &block, idx in blocks {
@@ -184,16 +188,21 @@ main :: proc() {
 
 				// Bar Draining
 				if bar.size.x > 0 do bar.size.x -= bar.drain_speed * frame_time
-				if bar.size.x <= 0 do bar.size.x = 0
+				if bar.size.x <= 0 {
+					bar.size.x = 0
+					bar.no_collision = true
+				}
 
 				// Ball movement
 				ball.pos += ball.dir * ball.speed * frame_time
 
+				// Reset ball & bar on death
 				if ball.pos.y > board_y_max {
 					ball.pos = rl.Vector2{0, 130}
 					bar.pos.x = 0
 					bar.vel_x = 0
 					bar.size.x = 100
+					bar.no_collision = false
 					game_state = Game_State_Aiming {
 						aim_angle = 0,
 						aim_speed = INITIAL_AIM_SPEED,
