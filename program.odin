@@ -33,7 +33,7 @@ main :: proc() {
 	board_y_max: f32 = 200
 
 	// LATER: optimization, use Lilnked List instead.
-	blocks := [dynamic; 64]rl.Rectangle {
+	blocks := [dynamic; 128]rl.Rectangle {
 		{-100, -100, 40, 20},
 		{-50, -100, 40, 20},
 		{0, -100, 40, 20},
@@ -50,7 +50,8 @@ main :: proc() {
 		{50, -40, 40, 20},
 		{100, -40, 40, 20},
 	}
-	blocks_remove_queue := [dynamic; 64]int{}
+	blocks_remove_queue := [dynamic; 128]int{}
+	block_descent_vel: f32 = 10
 
 
 	for !rl.WindowShouldClose() {
@@ -91,8 +92,11 @@ main :: proc() {
 
 			ball_pos += ball_dir * ball_speed * frame_time
 
-			if col, ok := phys.get_collision_ball_rectangle_inner(ball_pos, ball_radius, board_rectangle);
-			   ok {
+			if col, ok := phys.get_collision_ball_rectangle_inner(
+				ball_pos,
+				ball_radius,
+				board_rectangle,
+			); ok {
 				phys.handle_ball_collision(&ball_pos, &ball_dir, col)
 			}
 
@@ -101,7 +105,8 @@ main :: proc() {
 				phys.handle_ball_collision(&ball_pos, &ball_dir, col)
 			}
 
-			for block, idx in blocks {
+			for &block, idx in blocks {
+				block.y += block_descent_vel * frame_time
 				if col, ok := phys.get_collision_ball_rectangle(ball_pos, ball_radius, block); ok {
 					phys.handle_ball_collision(&ball_pos, &ball_dir, col)
 					append(&blocks_remove_queue, idx)
