@@ -4,17 +4,9 @@ import rl "vendor:raylib"
 
 // LATER: interpolate physics (capsulecast?)
 
-Ball_Rectangle_Collision_Corner :: struct {
-	normal: rl.Vector2,
-}
-Ball_Rectangle_Collision_Edge :: struct {
+Ball_Rectangle_Collision :: struct {
 	normal:           rl.Vector2,
 	center_reflected: rl.Vector2,
-}
-
-Ball_Rectangle_Collision :: union {
-	Ball_Rectangle_Collision_Corner,
-	Ball_Rectangle_Collision_Edge,
 }
 
 handle_ball_collision :: proc(
@@ -22,17 +14,34 @@ handle_ball_collision :: proc(
 	ball_dir: ^rl.Vector2,
 	col: Ball_Rectangle_Collision,
 ) {
-	switch c in col {
-	case Ball_Rectangle_Collision_Edge:
-		ball_pos^ = c.center_reflected
-		if c.normal.x == 0 {
-			ball_dir^ *= {1, -1}
-		} else {
-			ball_dir^ *= {-1, 1}
-		}
-	case Ball_Rectangle_Collision_Corner:
-	// STUB
+	ball_pos^ = col.center_reflected
+	proj := col.normal * rl.Vector2DotProduct(col.normal, ball_dir^)
+	ball_dir^ = -(ball_dir^ - (ball_dir^ - proj) * 2)
+}
+
+@(private = "file")
+handle_corner :: proc(
+	corner: rl.Vector2,
+	center: rl.Vector2,
+	radius: f32,
+) -> (
+	col: Ball_Rectangle_Collision,
+	ok: bool,
+) {
+	dist := rl.Vector2Distance(center, corner)
+	if dist > radius {
+		ok = false
+		return
 	}
+	normal := (center - corner) / dist
+	center_reflected := center + normal * (radius - dist) * 2
+
+	col = Ball_Rectangle_Collision {
+		normal           = normal,
+		center_reflected = center_reflected,
+	}
+	ok = true
+	return
 }
 
 get_collision_ball_rectangle :: proc(
@@ -63,55 +72,43 @@ get_collision_ball_rectangle :: proc(
 	if x_min <= center.x && center.x <= x_max {
 		// UD Edge
 		if y_mid <= center.y && center.y <= y_rmax {
-			y_ref := (y_rmax) * 2 - center.y
-			col = Ball_Rectangle_Collision_Edge {
-				normal           = {0, 1},
-				center_reflected = {center.x, y_ref},
-			}
+			corner := rl.Vector2{center.x, y_max}
+			col, _ = handle_corner(corner, center, radius)
 			ok = true
-		} else if y_rmin <= center.y && center.y <= y_mid {
-			y_ref := (y_rmin) * 2 - center.y
-			col = Ball_Rectangle_Collision_Edge {
-				normal           = {0, -1},
-				center_reflected = {center.x, y_ref},
-			}
+			return
+		}; if y_rmin <= center.y && center.y <= y_mid {
+			corner := rl.Vector2{center.x, y_min}
+			col, _ = handle_corner(corner, center, radius)
 			ok = true
-		} else {
-			// nothing
+			return
 		}
 	} else if y_min <= center.y && center.y <= y_max {
 		// LR Edge
 		if x_mid <= center.x && center.x <= x_rmax {
-			x_ref := (x_rmax) * 2 - center.x
-			col = Ball_Rectangle_Collision_Edge {
-				normal           = {0, 1},
-				center_reflected = {x_ref, center.y},
-			}
+			corner := rl.Vector2{x_max, center.y}
+			col_temp, _ := handle_corner(corner, center, radius)
+			col = col_temp
 			ok = true
-		} else if x_rmin <= center.x && center.x <= x_mid {
-			x_ref := (x_rmin) * 2 - center.x
-			col = Ball_Rectangle_Collision_Edge {
-				normal           = {0, -1},
-				center_reflected = {x_ref, center.y},
-			}
+			return
+		}; if x_rmin <= center.x && center.x <= x_mid {
+			corner := rl.Vector2{x_min, center.y}
+			col, _ = handle_corner(corner, center, radius)
 			ok = true
-		} else {
-			// nothing
+			return
 		}
 	} else {
 		// Corners
-		if rl.Vector2Distance(center, {x_min, y_min}) <= radius {
-			ok = true
-		} else if rl.Vector2Distance(center, {x_min, y_max}) <= radius {
-			ok = true
-		} else if rl.Vector2Distance(center, {x_max, y_min}) <= radius {
-			ok = true
-		} else if rl.Vector2Distance(center, {x_max, y_max}) <= radius {
-			ok = true
-		} else {
-			// nothing
+		corners := [4]rl.Vector2{{x_min, y_min}, {x_min, y_max}, {x_max, y_min}, {x_max, y_max}}
+		for corner in corners {
+			col_temp, ok_temp := handle_corner(corner, center, radius)
+			if ok_temp {
+				col = col_temp
+				ok = true
+				return
+			}
 		}
 	}
+
 
 	return
 }

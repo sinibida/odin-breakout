@@ -23,6 +23,8 @@ main :: proc() {
 
 	bar_pos := rl.Vector2{0, 150}
 	bar_size := rl.Vector2{100, 10}
+	bar_vel_x: f32 = 0
+	bar_acc_x: f32 = 5000
 	bar_speed: f32 = 500
 
 	board_x_min: f32 = -250
@@ -56,9 +58,22 @@ main :: proc() {
 		{
 			frame_time := rl.GetFrameTime()
 
-			if rl.IsKeyDown(rl.KeyboardKey.LEFT) do bar_pos.x -= bar_speed * frame_time
-			if rl.IsKeyDown(rl.KeyboardKey.RIGHT) do bar_pos.x += bar_speed * frame_time
+			// bar movement
+			if rl.IsKeyDown(rl.KeyboardKey.LEFT) do bar_vel_x -= bar_acc_x * frame_time
+			else if rl.IsKeyDown(rl.KeyboardKey.RIGHT) do bar_vel_x += bar_acc_x * frame_time
+			else {
+				if (abs(bar_vel_x) < rl.EPSILON) {
+					bar_vel_x = 0
+				} else {
+					bar_vel_x += (bar_vel_x > 0 ? -1 : 1) * bar_acc_x * frame_time
+				}
+			}
+			bar_vel_x = rl.Clamp(bar_vel_x, -bar_speed, bar_speed)
+			bar_pos.x += bar_vel_x * frame_time
 			bar_pos.x = rl.Clamp(bar_pos.x, -200, 200)
+			// Vel = 0 if the bar is clamped
+			if bar_pos.x == 200 do bar_vel_x = bar_vel_x > 0 ? 0 : bar_vel_x
+			if bar_pos.x == -200 do bar_vel_x = bar_vel_x < 0 ? 0 : bar_vel_x
 
 			bar_rectangle: rl.Rectangle
 			{
