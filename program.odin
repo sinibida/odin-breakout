@@ -13,9 +13,9 @@ Game_State_Aiming :: struct {
 	aim_range: f32,
 	aim_dir:   f32,
 }
-INITIAL_AIM_SPEED: f32 = 2
-INITIAL_AIM_RANGE: f32 = math.PI * 0.45
-INITIAL_AIM_DIR: f32 = -1
+INITIAL_AIM_SPEED: f32 : 2
+INITIAL_AIM_RANGE: f32 : math.PI * 0.45
+INITIAL_AIM_DIR: f32 : -1
 
 Game_State_Shooting :: struct {}
 
@@ -34,12 +34,14 @@ Ball :: struct {
 Bar :: struct {
 	pos:          rl.Vector2,
 	size:         rl.Vector2,
+	max_width:    f32,
 	vel_x:        f32,
 	acc_x:        f32,
 	speed:        f32,
 	drain_speed:  f32,
 	no_collision: bool,
 }
+INITIAL_BAR_MAX_WIDTH :: 100
 
 Block :: struct {
 	rect:       rl.Rectangle,
@@ -75,7 +77,8 @@ main :: proc() {
 
 	bar := Bar {
 		pos          = rl.Vector2{0, 150},
-		size         = rl.Vector2{100, 10},
+		size         = rl.Vector2{INITIAL_BAR_MAX_WIDTH, 10},
+		max_width    = INITIAL_BAR_MAX_WIDTH,
 		vel_x        = 0,
 		acc_x        = 5000,
 		speed        = 500,
@@ -101,6 +104,7 @@ main :: proc() {
 
 	player_health: i32 = 10
 	player_max_health: i32 = 10
+	player_score: i32 = 0
 
 	for !rl.WindowShouldClose() {
 		bar_rectangle := rl.Rectangle {
@@ -150,6 +154,10 @@ main :: proc() {
 					board_rectangle,
 				); ok {
 					phys.handle_ball_collision(&ball.pos, &ball.dir, col)
+					// TODO: No healing when no_collision is on
+					// gotta make some procedures...
+					// how do I implement class method on Odin??
+					bar.size.x = min(bar.size.x + 2, bar.max_width)
 				}
 
 				// Bar collision
@@ -160,6 +168,12 @@ main :: proc() {
 						bar_rectangle,
 					); ok {
 						phys.handle_ball_collision(&ball.pos, &ball.dir, col)
+						// TODO: No healing when no_collision is on
+						// gotta make some procedures...
+						// how do I implement class method on Odin??
+						bar.size.x = min(bar.size.x + 2, bar.max_width)
+						// TODO: Bar collision score+ <- needs throttling
+						player_score += 10
 					}
 				}
 
@@ -172,7 +186,11 @@ main :: proc() {
 					); ok {
 						phys.handle_ball_collision(&ball.pos, &ball.dir, col)
 						block.health -= 1
-						if block.health == 0 do append(&blocks_remove_queue, idx)
+						player_score += 5
+						if block.health == 0 {
+							append(&blocks_remove_queue, idx)
+							player_score += 15
+						}
 					}
 				}
 
@@ -271,6 +289,7 @@ main :: proc() {
 
 			rl.ClearBackground(rl.RAYWHITE)
 
+			// Draw Blocks
 			for block in blocks {
 				health_lost_rate := 1 - (f32(block.health) / f32(block.max_health))
 				fill_rect := block.rect
@@ -289,6 +308,7 @@ main :: proc() {
 				)
 			}
 
+			// Draw Health Bar
 			{
 				health_rate := f32(player_health) / f32(player_max_health)
 				health_bar_rect := rl.Rectangle {
@@ -310,15 +330,29 @@ main :: proc() {
 				)
 			}
 
+			// Ball
 			rl.DrawCircleV(ball.pos, ball.radius, rl.RED)
+
+			// Bar
 			rl.DrawRectangleRec(bar_rectangle, rl.RED)
 
+			// Board
 			rl.DrawRectangleLinesEx(board_draw_rectangle, 1, rl.RED)
 
+			// Aim Line
 			if gs, ok := game_state.(Game_State_Aiming); ok {
 				sin, cos := math.sincos(gs.aim_angle + math.PI)
 				rl.DrawLineV(ball.pos, ball.pos + rl.Vector2{sin, cos} * 200, rl.RED)
 			}
+
+			// Score
+			rl.DrawText(
+				rl.TextFormat("%07d", player_score),
+				i32(board_x_min),
+				i32(board_y_max) + 5,
+				20,
+				rl.BLACK,
+			)
 
 			rl.EndMode2D()
 			rl.EndDrawing()
