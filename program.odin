@@ -92,12 +92,15 @@ main :: proc() {
 	blocks := [dynamic; 128]Block{}
 	blocks_remove_queue := [dynamic; 128]int{}
 
-	block_gen_prob: f32 = 0.7
+	block_gen_prob: f32 = 0.5
 	block_gen_width: f32 = 40
 	block_gen_height: f32 = 20
 	block_gen_gap: f32 = 10
-	block_gen_col_cnt: i32 = 6
-	block_gen_y_min: f32 = -100
+	block_gen_col_cnt: i32 = 7
+	block_gen_y_min: f32 = -140
+
+	player_health: i32 = 10
+	player_max_health: i32 = 10
 
 	for !rl.WindowShouldClose() {
 		bar_rectangle := rl.Rectangle {
@@ -217,8 +220,13 @@ main :: proc() {
 					block_gen_x_min := -block_gen_full_width * 0.5
 					block_gen_x_interval := block_gen_width + block_gen_gap
 					block_gen_y_push := block_gen_height + block_gen_gap
-					for &block in blocks {
+					for &block, idx in blocks {
 						block.rect.y += block_gen_y_push
+						// Damages player if block touches bar line
+						if block.rect.y + block.rect.height > bar_rectangle.y {
+							player_health -= 1
+							append(&blocks_remove_queue, idx)
+						}
 					}
 					for i in 0 ..< block_gen_col_cnt {
 						rect := rl.Rectangle {
@@ -227,8 +235,12 @@ main :: proc() {
 							block_gen_width,
 							block_gen_height,
 						}
+						health := rand.int32_range(1, 4)
 						if rand.float32() < block_gen_prob {
-							append(&blocks, Block{rect = rect, health = 2, max_health = 2})
+							append(
+								&blocks,
+								Block{rect = rect, health = health, max_health = health},
+							)
 						}
 					}
 
@@ -266,6 +278,36 @@ main :: proc() {
 				fill_rect.width -= block.rect.width * health_lost_rate
 				rl.DrawRectangleGradientEx(fill_rect, rl.RED, rl.RAYWHITE, rl.RAYWHITE, rl.RED)
 				rl.DrawRectangleLinesEx(block.rect, 1, rl.RED)
+				health_text := rl.TextFormat("%d", block.health)
+				health_text_width := rl.MeasureText(health_text, 10)
+				rl.DrawText(
+					health_text,
+					i32(block.rect.x + block.rect.width / 2) - health_text_width / 2,
+					i32(block.rect.y + block.rect.height / 2) - 5,
+					10,
+					rl.RAYWHITE,
+				)
+			}
+
+			{
+				health_rate := f32(player_health) / f32(player_max_health)
+				health_bar_rect := rl.Rectangle {
+					board_x_min,
+					board_y_min - 20,
+					board_x_max - board_x_min,
+					10,
+				}
+				fill_rect := health_bar_rect
+				fill_rect.width *= health_rate
+				rl.DrawRectangleRec(fill_rect, rl.RED)
+				rl.DrawRectangleLinesEx(health_bar_rect, 1, rl.RED)
+				rl.DrawText(
+					rl.TextFormat("%d/%d", player_health, player_max_health),
+					i32(health_bar_rect.x) + 2,
+					i32(health_bar_rect.y),
+					10,
+					rl.RAYWHITE,
+				)
 			}
 
 			rl.DrawCircleV(ball.pos, ball.radius, rl.RED)
