@@ -1,0 +1,4 @@
+package lib
+
+WINDOW_WIDTH :: 560
+WINDOW_HEIGHT :: 480
