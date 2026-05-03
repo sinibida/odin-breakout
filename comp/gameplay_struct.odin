@@ -278,17 +278,13 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 		fill_rect := block.rect
 		fill_rect.x += block.rect.width * 0.5 * health_lost_rate
 		fill_rect.width -= block.rect.width * health_lost_rate
+
 		rl.DrawRectangleGradientEx(fill_rect, rl.RED, rl.RAYWHITE, rl.RAYWHITE, rl.RED)
 		rl.DrawRectangleLinesEx(block.rect, 1, rl.RED)
-		health_text := rl.TextFormat("%d", block.health)
-		health_text_width := rl.MeasureText(health_text, 10)
-		rl.DrawText(
-			health_text,
-			i32(block.rect.x + block.rect.width / 2) - health_text_width / 2,
-			i32(block.rect.y + block.rect.height / 2) - 5,
-			10,
-			rl.RAYWHITE,
-		)
+
+		text := rl.TextFormat("%d", block.health)
+		tx, ty := lib.get_text_pos_rect_origin(text, block.rect, {0.5, 0.5}, 10)
+		rl.DrawText(text, tx, ty, 10, rl.RAYWHITE)
 	}
 
 	// Draw Health Bar
@@ -302,15 +298,13 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 		}
 		fill_rect := health_bar_rect
 		fill_rect.width *= health_rate
+
 		rl.DrawRectangleRec(fill_rect, rl.RED)
 		rl.DrawRectangleLinesEx(health_bar_rect, 1, rl.RED)
-		rl.DrawText(
-			rl.TextFormat("%d/%d", st.player.health, st.player.max_health),
-			i32(health_bar_rect.x) + 2,
-			i32(health_bar_rect.y),
-			10,
-			rl.RAYWHITE,
-		)
+
+		text := rl.TextFormat("%d/%d", st.player.health, st.player.max_health)
+		tx, ty := lib.get_text_pos_rect_origin(text, health_bar_rect, {0, 0.5}, 10)
+		rl.DrawText(text, tx + 2, ty, 10, rl.RAYWHITE)
 	}
 
 	// Ball
@@ -329,13 +323,16 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 	}
 
 	// Score
-	rl.DrawText(
-		rl.TextFormat("%07d", st.player.score),
-		i32(st.board.x_min),
-		i32(st.board.y_max) + 5,
-		20,
-		rl.BLACK,
-	)
+	{
+		text := rl.TextFormat("%07d", st.player.score)
+		tx, ty := lib.get_text_pos_rect_origin(
+			text,
+			{st.board.x_max, st.board.y_max + 5, 0, 0},
+			{1, 0},
+			20,
+		)
+		rl.DrawText(text, tx, ty, 20, rl.BLACK)
+	}
 
 	rl.EndMode2D()
 	rl.EndDrawing()
