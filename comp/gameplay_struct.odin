@@ -65,18 +65,18 @@ Enemy :: struct {
 }
 
 Gameplay_Struct :: struct {
-	game_state:          Game_State,
-	camera:              rl.Camera2D,
-	ball:                Ball,
-	bar:                 Bar,
-	board:               Board,
-	block_gen:           Block_Gen,
-	blocks:              [dynamic]Block,
+	game_state: Game_State,
+	camera:     rl.Camera2D,
+	ball:       Ball,
+	bar:        Bar,
+	board:      Board,
+	block_gen:  Block_Gen,
+	blocks:     [dynamic]Block,
 	// blocks_remove_queue: [dynamic]int,
-	player:              Player,
-	enemy:               Enemy,
-	enemy_gen:           Enemy_Gen,
-	run_cnt:             i32,
+	player:     Player,
+	enemy:      Enemy,
+	enemy_gen:  Enemy_Gen,
+	run_cnt:    i32,
 }
 
 // `defer gp_st_free(st)` please!!!!!
@@ -402,6 +402,14 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 		health_bar_rect.y -= 14
 
 		lib.draw_health_bar(value, max_value, health_bar_rect, color)
+		// below is STUB.
+		rl.DrawText(
+			rl.TextFormat("Enemy LV.%d", st.enemy.level),
+			i32(health_bar_rect.x),
+			i32(health_bar_rect.y - 14),
+			10,
+			lib.MYBLACK,
+		)
 	}
 
 	// Score
