@@ -101,7 +101,7 @@ gp_st_init :: proc() -> Gameplay_Struct {
 		x_min = -250,
 		x_max = 250,
 		y_min = -200,
-		y_max = 200,
+		y_max = 180,
 	}
 
 	blocks := make([dynamic]Block)
@@ -172,10 +172,13 @@ gp_st_update_aiming :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Aiming) {
 
 @(private)
 gp_st_update_shooting :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Shooting) {
-	gp_st_handle_collision(st)
 	bar_move(&st.bar, st.board.x_min, st.board.x_max)
 	bar_drain(&st.bar)
 	ball_move(&st.ball)
+	gp_st_handle_collision(st)
+	if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
+		gp_st_on_ball_death(st)
+	}
 	if st.ball.pos.y > st.board.y_max {
 		gp_st_on_ball_death(st)
 	}
@@ -203,10 +206,11 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 			st.ball.radius,
 			bar_rectangle,
 		); ok {
-			phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
 			if st.bar.active do bar_heal(&st.bar, 2)
 			// TODO: Bar collision score+ <- needs throttling
 			st.player.score += 10
+
+			phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
 		}
 	}
 
@@ -214,13 +218,14 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 	for &block, idx in st.blocks {
 		if col, ok := phys.get_collision_ball_rectangle(st.ball.pos, st.ball.radius, block.rect);
 		   ok {
-			phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
 			block.health -= 1
 			st.player.score += 5
 			if block.health == 0 {
 				append(&st.blocks_remove_queue, idx)
 				st.player.score += 15
 			}
+
+			phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
 		}
 	}
 }
@@ -270,7 +275,7 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 	rl.BeginDrawing()
 	rl.BeginMode2D(st.camera)
 
-	rl.ClearBackground(rl.RAYWHITE)
+	rl.ClearBackground(lib.MYWHITE)
 
 	// Draw Blocks
 	for block in st.blocks {
@@ -279,59 +284,76 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 		fill_rect.x += block.rect.width * 0.5 * health_lost_rate
 		fill_rect.width -= block.rect.width * health_lost_rate
 
-		rl.DrawRectangleGradientEx(fill_rect, rl.RED, rl.RAYWHITE, rl.RAYWHITE, rl.RED)
-		rl.DrawRectangleLinesEx(block.rect, 1, rl.RED)
+		rl.DrawRectangleGradientEx(fill_rect, lib.MYRED, lib.MYWHITE, lib.MYWHITE, lib.MYRED)
+		rl.DrawRectangleLinesEx(block.rect, 1, lib.MYRED)
 
 		text := rl.TextFormat("%d", block.health)
 		tx, ty := lib.get_text_pos_rect_origin(text, block.rect, {0.5, 0.5}, 10)
-		rl.DrawText(text, tx, ty, 10, rl.RAYWHITE)
+		rl.DrawText(text, tx, ty, 10, lib.MYWHITE)
 	}
 
-	// Draw Health Bar
-	{
-		health_rate := f32(st.player.health) / f32(st.player.max_health)
-		health_bar_rect := rl.Rectangle {
-			st.board.x_min,
-			st.board.y_min - 20,
-			st.board.x_max - st.board.x_min,
-			10,
-		}
-		fill_rect := health_bar_rect
-		fill_rect.width *= health_rate
-
-		rl.DrawRectangleRec(fill_rect, rl.RED)
-		rl.DrawRectangleLinesEx(health_bar_rect, 1, rl.RED)
-
-		text := rl.TextFormat("%d/%d", st.player.health, st.player.max_health)
-		tx, ty := lib.get_text_pos_rect_origin(text, health_bar_rect, {0, 0.5}, 10)
-		rl.DrawText(text, tx + 2, ty, 10, rl.RAYWHITE)
-	}
 
 	// Ball
-	rl.DrawCircleV(st.ball.pos, st.ball.radius, rl.RED)
+	rl.DrawCircleV(st.ball.pos, st.ball.radius, lib.MYRED)
 
 	// Bar
-	rl.DrawRectangleRec(bar_rectangle, rl.RED)
+	rl.DrawRectangleRec(bar_rectangle, lib.MYRED)
 
 	// Board
-	rl.DrawRectangleLinesEx(board_rectangle, 1, rl.RED)
+	rl.DrawRectangleLinesEx(board_rectangle, 1, lib.MYRED)
 
 	// Aim Line
 	if gs, ok := st.game_state.(Game_State_Aiming); ok {
 		sin, cos := math.sincos(gs.aim_angle + math.PI)
-		rl.DrawLineV(st.ball.pos, st.ball.pos + rl.Vector2{sin, cos} * 200, rl.RED)
+		rl.DrawLineV(st.ball.pos, st.ball.pos + rl.Vector2{sin, cos} * 200, lib.MYRED)
+	}
+
+	bottom_rect := rl.Rectangle {
+		board_rectangle.x,
+		board_rectangle.y + board_rectangle.height + 4,
+		board_rectangle.width,
+		20,
 	}
 
 	// Score
+	score_text_width: i32
 	{
-		text := rl.TextFormat("%07d", st.player.score)
-		tx, ty := lib.get_text_pos_rect_origin(
-			text,
-			{st.board.x_max, st.board.y_max + 5, 0, 0},
-			{1, 0},
+		score_text_width = lib.draw_score_text(
+			st.player.score,
+			7,
 			20,
+			2,
+			st.board.x_max,
+			st.board.y_max + 5,
+			{1, 0},
 		)
-		rl.DrawText(text, tx, ty, 20, rl.BLACK)
+	}
+
+	bottom_left_rect := bottom_rect
+	bottom_left_rect.width -= f32(score_text_width + 4)
+
+	// Draw Health Bar
+	{
+		health_rate := f32(st.player.health) / f32(st.player.max_health)
+		health_bar_rect := bottom_left_rect
+		health_bar_rect.height = 10
+		fill_rect := health_bar_rect
+		fill_rect.width *= health_rate
+
+		rl.DrawRectangleRec(fill_rect, lib.MYRED)
+		rl.DrawRectangleLinesEx(health_bar_rect, 1, lib.MYRED)
+
+		text := rl.TextFormat("%d/%d", st.player.health, st.player.max_health)
+		tx, ty := lib.get_text_pos_rect_origin(text, health_bar_rect, {0, 0.5}, 10)
+		rl.DrawText(text, tx + 2, ty, 10, lib.MYWHITE)
+	}
+
+	// Draw run info (STUB)
+	{
+		text: cstring = "RUN 001  GOLD 00000 WWHAT???"
+		tx := bottom_left_rect.x
+		ty := bottom_left_rect.y + bottom_left_rect.height
+		lib.draw_mono_text(text, 10, 1, tx, ty, {0, 1})
 	}
 
 	rl.EndMode2D()
