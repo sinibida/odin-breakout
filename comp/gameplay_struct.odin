@@ -50,9 +50,10 @@ ball_move :: proc(ball: ^Ball) {
 }
 
 Block :: struct {
-	rect:       rl.Rectangle,
-	max_health: i32,
-	health:     i32,
+	rect:          rl.Rectangle,
+	max_health:    i32,
+	health:        i32,
+	remove_queued: bool,
 }
 
 Enemy :: struct {
@@ -71,7 +72,7 @@ Gameplay_Struct :: struct {
 	board:               Board,
 	block_gen:           Block_Gen,
 	blocks:              [dynamic]Block,
-	blocks_remove_queue: [dynamic]int,
+	// blocks_remove_queue: [dynamic]int,
 	player:              Player,
 	enemy:               Enemy,
 	enemy_gen:           Enemy_Gen,
@@ -115,7 +116,6 @@ gp_st_init :: proc() -> Gameplay_Struct {
 	}
 
 	blocks := make([dynamic]Block)
-	blocks_remove_queue := make([dynamic]int)
 
 	block_gen := Block_Gen {
 		prob    = 0.5,
@@ -141,7 +141,6 @@ gp_st_init :: proc() -> Gameplay_Struct {
 		ball = ball,
 		bar = bar,
 		blocks = blocks,
-		blocks_remove_queue = blocks_remove_queue,
 		block_gen = block_gen,
 		board = board,
 		game_state = game_state,
@@ -155,7 +154,6 @@ gp_st_init :: proc() -> Gameplay_Struct {
 
 gp_st_free :: proc(st: ^Gameplay_Struct) {
 	delete(st.blocks)
-	delete(st.blocks_remove_queue)
 }
 
 gp_st_update :: proc(st: ^Gameplay_Struct) {
@@ -254,13 +252,13 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 	}
 
 	// Block collision
-	for &block, idx in st.blocks {
+	for &block in st.blocks {
 		if col, ok := phys.get_collision_ball_rectangle(st.ball.pos, st.ball.radius, block.rect);
 		   ok {
 			block.health -= 1
 			st.player.score += 5
 			if block.health == 0 {
-				append(&st.blocks_remove_queue, idx)
+				block.remove_queued = true
 				st.player.score += 15
 				st.enemy.health -= 1
 			}
@@ -282,11 +280,11 @@ gp_st_on_ball_death :: proc(st: ^Gameplay_Struct) {
 	// push a row of blocks
 	block_gen_push(&st.block_gen, &st.blocks)
 	block_gen_append_row(&st.block_gen, &st.blocks, &st.enemy)
-	for &block, idx in st.blocks {
+	for &block in st.blocks {
 		// Damages player if block touches bar line
 		if block.rect.y + block.rect.height > bar_rectangle.y {
 			st.player.health = st.player.health - 1
-			append(&st.blocks_remove_queue, idx)
+			block.remove_queued = true
 		}
 	}
 
@@ -325,28 +323,13 @@ gp_st_reset_run :: proc(st: ^Gameplay_Struct) {
 }
 
 gp_st_handle_blocks_remove_queue :: proc(st: ^Gameplay_Struct) {
-	if len(st.blocks_remove_queue) == 0 do return
-
-	// This is too bug-prone...
-	// TODO: better system?
-
-	slice.sort(st.blocks_remove_queue[:])
-	#reverse for i, idx in st.blocks_remove_queue {
-		if i >= len(st.blocks) || i < 0 {
-			log.warnf("%d is out of range", i)
-			continue
-		}
-		// ignore duplicate
-		if idx > 0 && i == st.blocks_remove_queue[idx - 1] {
-			continue
-		}
-		unordered_remove(&st.blocks, i)
+	#reverse for block, idx in st.blocks {
+		if block.remove_queued do unordered_remove(&st.blocks, idx)
 	}
-	clear(&st.blocks_remove_queue)
 }
 
 gp_st_queue_clear_blocks :: proc(st: ^Gameplay_Struct) {
-	for i in 0 ..< len(st.blocks) do append(&st.blocks_remove_queue, i)
+	for &block in st.blocks do block.remove_queued = true
 }
 
 gp_st_update_player_dead :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Player_Dead) {

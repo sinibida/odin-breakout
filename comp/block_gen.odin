@@ -33,7 +33,7 @@ block_gen_append_row :: proc(block_gen: ^Block_Gen, blocks: ^[dynamic]Block, ene
 		}
 		health := rand.int32_range(1, 3 + enemy.level)
 		if rand.float32() < block_gen.prob {
-			append(blocks, Block{rect = rect, health = health, max_health = health})
+			append(blocks, Block{rect = rect, health = health, max_health = health, remove_queued=false})
 		}
 	}
 }
