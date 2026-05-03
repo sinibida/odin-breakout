@@ -18,15 +18,23 @@ Game_State_Aiming :: struct {
 	aim_range: f32,
 	aim_dir:   f32,
 }
-INITIAL_AIM_SPEED: f32 : 2
-INITIAL_AIM_RANGE: f32 : math.PI * 0.45
-INITIAL_AIM_DIR: f32 : -1
+game_state_aiming_init :: proc() -> Game_State_Aiming {
+	return Game_State_Aiming {
+		aim_angle = 0,
+		aim_speed = 2,
+		aim_range = math.PI * 0.45,
+		aim_dir = -1,
+	}
+}
 
 Game_State_Shooting :: struct {}
+
+Game_State_Player_Dead :: struct {}
 
 Game_State :: union {
 	Game_State_Aiming,
 	Game_State_Shooting,
+	Game_State_Player_Dead,
 }
 
 Player :: struct {
@@ -68,16 +76,12 @@ Gameplay_Struct :: struct {
 	blocks_remove_queue: [dynamic]int,
 	player:              Player,
 	enemy:               Enemy,
+	run_cnt:             i32,
 }
 
 // `defer gp_st_free(st)` please!!!!!
 gp_st_init :: proc() -> Gameplay_Struct {
-	game_state: Game_State = Game_State_Aiming {
-		aim_angle = 0,
-		aim_speed = INITIAL_AIM_SPEED,
-		aim_range = INITIAL_AIM_RANGE,
-		aim_dir   = INITIAL_AIM_DIR,
-	}
+	game_state: Game_State = game_state_aiming_init()
 
 	camera := rl.Camera2D {
 		offset = {lib.WINDOW_WIDTH / 2.0, lib.WINDOW_HEIGHT / 2.0},
@@ -144,6 +148,7 @@ gp_st_init :: proc() -> Gameplay_Struct {
 		camera = camera,
 		player = player,
 		enemy = enemy,
+		run_cnt = 0,
 	}
 }
 
@@ -160,6 +165,8 @@ gp_st_update :: proc(st: ^Gameplay_Struct) {
 		gp_st_update_aiming(st, &gs)
 	case Game_State_Shooting:
 		gp_st_update_shooting(st, &gs)
+	case Game_State_Player_Dead:
+		gp_st_update_player_dead(st, &gs)
 	}
 
 	gp_st_clear_blocks_remove_queue(st)
@@ -246,6 +253,9 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 				st.enemy.health -= 1
 			}
 
+			// Allows the ball to go tutututututututtutu between block & bar
+			st.bar.t_no_col = 0
+
 			phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
 		}
 	}
@@ -255,11 +265,7 @@ gp_st_on_ball_death :: proc(st: ^Gameplay_Struct) {
 	bar_rectangle := bar_get_rectangle(&st.bar)
 
 	// Reset bar & ball
-	st.ball.pos = rl.Vector2{0, 130}
-	st.bar.pos.x = 0
-	st.bar.vel_x = 0
-	st.bar.size.x = 100
-	st.bar.active = true
+	gp_st_reset_bar_ball(st)
 
 	// push a row of blocks
 	block_gen_push(&st.block_gen, &st.blocks)
@@ -267,18 +273,34 @@ gp_st_on_ball_death :: proc(st: ^Gameplay_Struct) {
 	for &block, idx in st.blocks {
 		// Damages player if block touches bar line
 		if block.rect.y + block.rect.height > bar_rectangle.y {
-			st.player.health = max(0, st.player.health - 1)
+			st.player.health = st.player.health - 1
 			append(&st.blocks_remove_queue, idx)
 		}
 	}
 
 	// update state
-	st.game_state = Game_State_Aiming {
-		aim_angle = 0,
-		aim_speed = INITIAL_AIM_SPEED,
-		aim_range = INITIAL_AIM_RANGE,
-		aim_dir   = INITIAL_AIM_DIR,
+	if st.player.health <= 0 {
+		st.game_state = Game_State_Player_Dead{}
+	} else {
+		st.game_state = game_state_aiming_init()
 	}
+}
+
+gp_st_reset_bar_ball :: proc(st: ^Gameplay_Struct) {
+	st.ball.pos = rl.Vector2{0, 130}
+	st.bar.pos.x = 0
+	st.bar.vel_x = 0
+	st.bar.size.x = 100
+	st.bar.active = true
+}
+
+gp_st_reset_run :: proc(st: ^Gameplay_Struct) {
+	clear(&st.blocks) // Surely this won't cause problems... right?
+	gp_st_reset_bar_ball(st)
+	st.game_state = game_state_aiming_init()
+	st.enemy.health = st.enemy.max_health
+	st.player.health = st.player.max_health
+	st.player.score = 0
 }
 
 gp_st_clear_blocks_remove_queue :: proc(st: ^Gameplay_Struct) {
@@ -289,9 +311,18 @@ gp_st_clear_blocks_remove_queue :: proc(st: ^Gameplay_Struct) {
 	clear(&st.blocks_remove_queue)
 }
 
+gp_st_update_player_dead :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Player_Dead) {
+	// TODO: allow user to select and/or buy upgrade with score earned
+	gp_st_reset_run(st)
+	st.run_cnt += 1
+	// TODO: Make Player Stronger
+}
+
 gp_st_draw :: proc(st: ^Gameplay_Struct) {
 	bar_rectangle := bar_get_rectangle(&st.bar)
 	board_rectangle := board_get_draw_rectangle(&st.board)
+
+	bar_hit_lerp := st.bar.t_no_col / BAR_COLLISION_THROTTLE
 
 	rl.BeginDrawing()
 	rl.BeginMode2D(st.camera)
@@ -318,7 +349,11 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 	rl.DrawCircleV(st.ball.pos, st.ball.radius, lib.MYRED)
 
 	// Bar
-	rl.DrawRectangleRec(bar_rectangle, lib.MYRED)
+	if st.bar.active {
+		fill_color := rl.ColorLerp(lib.MYRED, lib.MYWHITE, bar_hit_lerp)
+		rl.DrawRectangleRec(bar_rectangle, fill_color)
+		rl.DrawRectangleLinesEx(bar_rectangle, 1, lib.MYRED)
+	}
 
 	// Board
 	rl.DrawRectangleLinesEx(board_rectangle, 1, lib.MYRED)
@@ -340,21 +375,13 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 	{
 		value := st.enemy.health
 		max_value := st.enemy.max_health
+		color := lib.MYBLUE
 
 		health_bar_rect := board_rectangle
 		health_bar_rect.height = 10
 		health_bar_rect.y -= 14
 
-		health_rate := f32(value) / f32(max_value)
-		fill_rect := health_bar_rect
-		fill_rect.width *= health_rate
-
-		rl.DrawRectangleRec(fill_rect, lib.MYBLUE)
-		rl.DrawRectangleLinesEx(health_bar_rect, 1, lib.MYBLUE)
-
-		text := rl.TextFormat("%d/%d", value, max_value)
-		tx, ty := lib.get_text_pos_rect_origin(text, health_bar_rect, {0, 0.5}, 10)
-		rl.DrawText(text, tx + 2, ty, 10, lib.MYWHITE)
+		lib.draw_health_bar(value, max_value, health_bar_rect, color)
 	}
 
 	// Score
@@ -378,25 +405,17 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 	{
 		value := st.player.health
 		max_value := st.player.max_health
+		color := lib.MYRED
 
 		health_bar_rect := bottom_left_rect
 		health_bar_rect.height = 10
 
-		health_rate := f32(value) / f32(max_value)
-		fill_rect := health_bar_rect
-		fill_rect.width *= health_rate
-
-		rl.DrawRectangleRec(fill_rect, lib.MYRED)
-		rl.DrawRectangleLinesEx(health_bar_rect, 1, lib.MYRED)
-
-		text := rl.TextFormat("%d/%d", value, max_value)
-		tx, ty := lib.get_text_pos_rect_origin(text, health_bar_rect, {0, 0.5}, 10)
-		rl.DrawText(text, tx + 2, ty, 10, lib.MYWHITE)
+		lib.draw_health_bar(value, max_value, health_bar_rect, color)
 	}
 
 	// Draw run info (STUB)
 	{
-		text: cstring = "RUN 001  GOLD 00000 WWHAT???"
+		text: cstring = rl.TextFormat("RUN %03d  GOLD 00000 WWHAT???", st.run_cnt + 1)
 		tx := bottom_left_rect.x
 		ty := bottom_left_rect.y + bottom_left_rect.height
 		lib.draw_mono_text(text, 10, 1, tx, ty, {0, 1})
