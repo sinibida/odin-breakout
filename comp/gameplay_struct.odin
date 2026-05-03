@@ -52,6 +52,11 @@ Block :: struct {
 	health:     i32,
 }
 
+Enemy :: struct {
+	max_health: i32,
+	health:     i32,
+}
+
 Gameplay_Struct :: struct {
 	game_state:          Game_State,
 	camera:              rl.Camera2D,
@@ -62,6 +67,7 @@ Gameplay_Struct :: struct {
 	blocks:              [dynamic]Block,
 	blocks_remove_queue: [dynamic]int,
 	player:              Player,
+	enemy:               Enemy,
 }
 
 // `defer gp_st_free(st)` please!!!!!
@@ -93,7 +99,7 @@ gp_st_init :: proc() -> Gameplay_Struct {
 		vel_x       = 0,
 		acc_x       = 5000,
 		speed       = 500,
-		drain_speed = 10,
+		drain_speed = 15,
 		active      = true,
 	}
 
@@ -122,6 +128,11 @@ gp_st_init :: proc() -> Gameplay_Struct {
 		score      = 0,
 	}
 
+	enemy := Enemy {
+		max_health = 20,
+		health     = 20,
+	}
+
 	return {
 		ball = ball,
 		bar = bar,
@@ -132,6 +143,7 @@ gp_st_init :: proc() -> Gameplay_Struct {
 		game_state = game_state,
 		camera = camera,
 		player = player,
+		enemy = enemy,
 	}
 }
 
@@ -141,6 +153,8 @@ gp_st_free :: proc(st: ^Gameplay_Struct) {
 }
 
 gp_st_update :: proc(st: ^Gameplay_Struct) {
+	gp_st_t(st)
+
 	switch &gs in st.game_state {
 	case Game_State_Aiming:
 		gp_st_update_aiming(st, &gs)
@@ -149,6 +163,10 @@ gp_st_update :: proc(st: ^Gameplay_Struct) {
 	}
 
 	gp_st_clear_blocks_remove_queue(st)
+}
+
+gp_st_t :: proc(st: ^Gameplay_Struct) {
+	bar_t(&st.bar)
 }
 
 @(private)
@@ -196,19 +214,21 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 		board_rectangle,
 	); ok {
 		phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
-		if st.bar.active do bar_heal(&st.bar, 2)
+		if st.bar.active do bar_heal(&st.bar, 4)
 	}
 
 	// Bar collision
-	if st.bar.active {
+	if st.bar.active && st.bar.t_no_col <= 0 {
 		if col, ok := phys.get_collision_ball_rectangle(
 			st.ball.pos,
 			st.ball.radius,
 			bar_rectangle,
 		); ok {
-			if st.bar.active do bar_heal(&st.bar, 2)
+			if st.bar.active do bar_heal(&st.bar, 4)
 			// TODO: Bar collision score+ <- needs throttling
 			st.player.score += 10
+
+			st.bar.t_no_col = BAR_COLLISION_THROTTLE
 
 			phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
 		}
@@ -223,6 +243,7 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 			if block.health == 0 {
 				append(&st.blocks_remove_queue, idx)
 				st.player.score += 15
+				st.enemy.health -= 1
 			}
 
 			phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
@@ -284,8 +305,8 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 		fill_rect.x += block.rect.width * 0.5 * health_lost_rate
 		fill_rect.width -= block.rect.width * health_lost_rate
 
-		rl.DrawRectangleGradientEx(fill_rect, lib.MYRED, lib.MYWHITE, lib.MYWHITE, lib.MYRED)
-		rl.DrawRectangleLinesEx(block.rect, 1, lib.MYRED)
+		rl.DrawRectangleGradientEx(fill_rect, lib.MYBLUE, lib.MYWHITE, lib.MYWHITE, lib.MYBLUE)
+		rl.DrawRectangleLinesEx(block.rect, 1, lib.MYBLUE)
 
 		text := rl.TextFormat("%d", block.health)
 		tx, ty := lib.get_text_pos_rect_origin(text, block.rect, {0.5, 0.5}, 10)
@@ -315,6 +336,27 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 		20,
 	}
 
+	// Enemy health bar
+	{
+		value := st.enemy.health
+		max_value := st.enemy.max_health
+
+		health_bar_rect := board_rectangle
+		health_bar_rect.height = 10
+		health_bar_rect.y -= 14
+
+		health_rate := f32(value) / f32(max_value)
+		fill_rect := health_bar_rect
+		fill_rect.width *= health_rate
+
+		rl.DrawRectangleRec(fill_rect, lib.MYBLUE)
+		rl.DrawRectangleLinesEx(health_bar_rect, 1, lib.MYBLUE)
+
+		text := rl.TextFormat("%d/%d", value, max_value)
+		tx, ty := lib.get_text_pos_rect_origin(text, health_bar_rect, {0, 0.5}, 10)
+		rl.DrawText(text, tx + 2, ty, 10, lib.MYWHITE)
+	}
+
 	// Score
 	score_text_width: i32
 	{
@@ -330,20 +372,24 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 	}
 
 	bottom_left_rect := bottom_rect
-	bottom_left_rect.width -= f32(score_text_width + 4)
+	bottom_left_rect.width -= f32(score_text_width + 8)
 
 	// Draw Health Bar
 	{
-		health_rate := f32(st.player.health) / f32(st.player.max_health)
+		value := st.player.health
+		max_value := st.player.max_health
+
 		health_bar_rect := bottom_left_rect
 		health_bar_rect.height = 10
+
+		health_rate := f32(value) / f32(max_value)
 		fill_rect := health_bar_rect
 		fill_rect.width *= health_rate
 
 		rl.DrawRectangleRec(fill_rect, lib.MYRED)
 		rl.DrawRectangleLinesEx(health_bar_rect, 1, lib.MYRED)
 
-		text := rl.TextFormat("%d/%d", st.player.health, st.player.max_health)
+		text := rl.TextFormat("%d/%d", value, max_value)
 		tx, ty := lib.get_text_pos_rect_origin(text, health_bar_rect, {0, 0.5}, 10)
 		rl.DrawText(text, tx + 2, ty, 10, lib.MYWHITE)
 	}

@@ -11,8 +11,15 @@ Bar :: struct {
 	speed:       f32,
 	drain_speed: f32,
 	active:      bool,
+	t_no_col: f32,
 }
 INITIAL_BAR_MAX_WIDTH :: 100
+BAR_COLLISION_THROTTLE :f32: 0.5
+
+bar_t :: proc(bar: ^Bar) {
+	frame_time := rl.GetFrameTime()
+	bar.t_no_col -= frame_time
+}
 
 bar_get_rectangle :: proc(bar: ^Bar) -> rl.Rectangle {
 	return rl.Rectangle {
