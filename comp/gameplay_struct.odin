@@ -60,7 +60,7 @@ Enemy :: struct {
 	max_health: i32,
 	health:     i32,
 	// This is STUB.
-	level: i32,
+	level:      i32,
 }
 
 Gameplay_Struct :: struct {
@@ -104,6 +104,7 @@ gp_st_init :: proc() -> Gameplay_Struct {
 		speed       = 500,
 		drain_speed = 15,
 		active      = true,
+		friction    = 0.7,
 	}
 
 	board := Board {
@@ -244,6 +245,11 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 			st.bar.t_no_col = BAR_COLLISION_THROTTLE
 
 			phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
+
+			// handle friction
+			ball_velocity := st.ball.dir * st.ball.speed
+			ball_velocity.x += st.bar.vel_x * st.bar.friction
+			st.ball.dir = rl.Vector2Normalize(ball_velocity)
 		}
 	}
 
@@ -321,14 +327,17 @@ gp_st_reset_run :: proc(st: ^Gameplay_Struct) {
 gp_st_handle_blocks_remove_queue :: proc(st: ^Gameplay_Struct) {
 	if len(st.blocks_remove_queue) == 0 do return
 
+	// This is too bug-prone...
+	// TODO: better system?
+
 	slice.sort(st.blocks_remove_queue[:])
 	#reverse for i, idx in st.blocks_remove_queue {
-		if i >= len(st.blocks) {
+		if i >= len(st.blocks) || i < 0 {
 			log.warnf("%d is out of range", i)
 			continue
 		}
 		// ignore duplicate
-		if idx > 0 && i == st.blocks_remove_queue[i - 1] {
+		if idx > 0 && i == st.blocks_remove_queue[idx - 1] {
 			continue
 		}
 		unordered_remove(&st.blocks, i)

@@ -11,10 +11,11 @@ Bar :: struct {
 	speed:       f32,
 	drain_speed: f32,
 	active:      bool,
-	t_no_col: f32,
+	t_no_col:    f32,
+	friction:    f32, // 0-1
 }
 INITIAL_BAR_MAX_WIDTH :: 100
-BAR_COLLISION_THROTTLE :f32: 0.5
+BAR_COLLISION_THROTTLE: f32 : 0.5
 
 bar_t :: proc(bar: ^Bar) {
 	frame_time := rl.GetFrameTime()
