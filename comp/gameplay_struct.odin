@@ -1,13 +1,8 @@
-
-// LEFTOFF:
-// - Bar healing -> function
-// - Reread
-// - Bar Collision Throttling
-
 package comp
 
 import "../lib"
 import "../phys"
+import "core:log"
 import "core:math"
 import "core:slice"
 import rl "vendor:raylib"
@@ -61,8 +56,11 @@ Block :: struct {
 }
 
 Enemy :: struct {
+	// TODO should use using & union for various enemy
 	max_health: i32,
 	health:     i32,
+	// This is STUB.
+	level: i32,
 }
 
 Gameplay_Struct :: struct {
@@ -76,6 +74,7 @@ Gameplay_Struct :: struct {
 	blocks_remove_queue: [dynamic]int,
 	player:              Player,
 	enemy:               Enemy,
+	enemy_gen:           Enemy_Gen,
 	run_cnt:             i32,
 }
 
@@ -132,10 +131,10 @@ gp_st_init :: proc() -> Gameplay_Struct {
 		score      = 0,
 	}
 
-	enemy := Enemy {
-		max_health = 20,
-		health     = 20,
+	enemy_gen := Enemy_Gen {
+		level = 1,
 	}
+	enemy := enemy_gen_new_enemy(&enemy_gen)
 
 	return {
 		ball = ball,
@@ -148,6 +147,7 @@ gp_st_init :: proc() -> Gameplay_Struct {
 		camera = camera,
 		player = player,
 		enemy = enemy,
+		enemy_gen = enemy_gen,
 		run_cnt = 0,
 	}
 }
@@ -169,7 +169,7 @@ gp_st_update :: proc(st: ^Gameplay_Struct) {
 		gp_st_update_player_dead(st, &gs)
 	}
 
-	gp_st_clear_blocks_remove_queue(st)
+	gp_st_handle_blocks_remove_queue(st)
 }
 
 gp_st_t :: proc(st: ^Gameplay_Struct) {
@@ -189,7 +189,7 @@ gp_st_update_aiming :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Aiming) {
 		gs.aim_angle = -gs.aim_range - (gs.aim_angle + gs.aim_range)
 		gs.aim_dir *= -1
 	}
-	
+
 	if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
 		sin, cos := math.sincos(gs.aim_angle + math.PI)
 		st.ball.dir = {sin, cos}
@@ -204,6 +204,8 @@ gp_st_update_shooting :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Shooting) {
 	ball_move(&st.ball)
 
 	gp_st_handle_collision(st)
+
+	if st.enemy.health <= 0 do gp_st_on_enemy_death(st)
 
 	// Pressing SPACE mid-shooting kills the ball
 	if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
@@ -273,7 +275,7 @@ gp_st_on_ball_death :: proc(st: ^Gameplay_Struct) {
 
 	// push a row of blocks
 	block_gen_push(&st.block_gen, &st.blocks)
-	block_gen_append_row(&st.block_gen, &st.blocks)
+	block_gen_append_row(&st.block_gen, &st.blocks, &st.enemy)
 	for &block, idx in st.blocks {
 		// Damages player if block touches bar line
 		if block.rect.y + block.rect.height > bar_rectangle.y {
@@ -290,6 +292,14 @@ gp_st_on_ball_death :: proc(st: ^Gameplay_Struct) {
 	}
 }
 
+gp_st_on_enemy_death :: proc(st: ^Gameplay_Struct) {
+	st.enemy_gen.level += 1
+	st.enemy = enemy_gen_new_enemy(&st.enemy_gen)
+	gp_st_queue_clear_blocks(st)
+	gp_st_reset_bar_ball(st)
+	st.game_state = game_state_aiming_init()
+}
+
 gp_st_reset_bar_ball :: proc(st: ^Gameplay_Struct) {
 	st.ball.pos = rl.Vector2{0, 130}
 	st.bar.pos.x = 0
@@ -301,19 +311,33 @@ gp_st_reset_bar_ball :: proc(st: ^Gameplay_Struct) {
 gp_st_reset_run :: proc(st: ^Gameplay_Struct) {
 	gp_st_reset_bar_ball(st)
 
-	clear(&st.blocks) // Surely this won't cause problems... right?
+	gp_st_queue_clear_blocks(st)
 	st.game_state = game_state_aiming_init()
 	st.enemy.health = st.enemy.max_health
 	st.player.health = st.player.max_health
 	st.player.score = 0
 }
 
-gp_st_clear_blocks_remove_queue :: proc(st: ^Gameplay_Struct) {
+gp_st_handle_blocks_remove_queue :: proc(st: ^Gameplay_Struct) {
+	if len(st.blocks_remove_queue) == 0 do return
+
 	slice.sort(st.blocks_remove_queue[:])
-	#reverse for i in st.blocks_remove_queue {
+	#reverse for i, idx in st.blocks_remove_queue {
+		if i >= len(st.blocks) {
+			log.warnf("%d is out of range", i)
+			continue
+		}
+		// ignore duplicate
+		if idx > 0 && i == st.blocks_remove_queue[i - 1] {
+			continue
+		}
 		unordered_remove(&st.blocks, i)
 	}
 	clear(&st.blocks_remove_queue)
+}
+
+gp_st_queue_clear_blocks :: proc(st: ^Gameplay_Struct) {
+	for i in 0 ..< len(st.blocks) do append(&st.blocks_remove_queue, i)
 }
 
 gp_st_update_player_dead :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Player_Dead) {
