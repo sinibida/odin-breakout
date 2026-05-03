@@ -52,3 +52,7 @@ bar_drain :: proc(bar: ^Bar) {
 		bar.active = false
 	}
 }
+
+bar_heal :: proc(bar: ^Bar, amount: f32) {
+	bar.size.x = min(bar.size.x + amount, bar.max_width)
+}

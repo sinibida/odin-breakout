@@ -193,10 +193,7 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 		board_rectangle,
 	); ok {
 		phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
-		// TODO: No healing when no_collision is on
-		// gotta make some procedures...
-		// how do I implement class method on Odin??
-		st.bar.size.x = min(st.bar.size.x + 2, st.bar.max_width)
+		if st.bar.active do bar_heal(&st.bar, 2)
 	}
 
 	// Bar collision
@@ -207,10 +204,7 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 			bar_rectangle,
 		); ok {
 			phys.handle_ball_collision(&st.ball.pos, &st.ball.dir, col)
-			// TODO: No healing when no_collision is on
-			// gotta make some procedures...
-			// how do I implement class method on Odin??
-			st.bar.size.x = min(st.bar.size.x + 2, st.bar.max_width)
+			if st.bar.active do bar_heal(&st.bar, 2)
 			// TODO: Bar collision score+ <- needs throttling
 			st.player.score += 10
 		}
@@ -247,7 +241,7 @@ gp_st_on_ball_death :: proc(st: ^Gameplay_Struct) {
 	for &block, idx in st.blocks {
 		// Damages player if block touches bar line
 		if block.rect.y + block.rect.height > bar_rectangle.y {
-			st.player.health -= 1
+			st.player.health = max(0, st.player.health - 1)
 			append(&st.blocks_remove_queue, idx)
 		}
 	}
