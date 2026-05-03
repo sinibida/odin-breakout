@@ -110,7 +110,7 @@ gp_st_init :: proc() -> Gameplay_Struct {
 	board := Board {
 		x_min = -250,
 		x_max = 250,
-		y_min = -200,
+		y_min = -180,
 		y_max = 180,
 	}
 
@@ -176,9 +176,10 @@ gp_st_t :: proc(st: ^Gameplay_Struct) {
 	bar_t(&st.bar)
 }
 
-@(private)
 gp_st_update_aiming :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Aiming) {
 	frame_time := rl.GetFrameTime()
+
+	// aim_angle alternates between -aim_range & aim_range
 	gs.aim_angle += frame_time * gs.aim_speed * gs.aim_dir
 	if gs.aim_angle > gs.aim_range {
 		gs.aim_angle = gs.aim_range - (gs.aim_angle - gs.aim_range)
@@ -188,6 +189,7 @@ gp_st_update_aiming :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Aiming) {
 		gs.aim_angle = -gs.aim_range - (gs.aim_angle + gs.aim_range)
 		gs.aim_dir *= -1
 	}
+	
 	if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
 		sin, cos := math.sincos(gs.aim_angle + math.PI)
 		st.ball.dir = {sin, cos}
@@ -195,21 +197,24 @@ gp_st_update_aiming :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Aiming) {
 	}
 }
 
-@(private)
 gp_st_update_shooting :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Shooting) {
-	bar_move(&st.bar, st.board.x_min, st.board.x_max)
 	bar_drain(&st.bar)
+
+	bar_move(&st.bar, st.board.x_min, st.board.x_max)
 	ball_move(&st.ball)
+
 	gp_st_handle_collision(st)
+
+	// Pressing SPACE mid-shooting kills the ball
 	if rl.IsKeyPressed(rl.KeyboardKey.SPACE) {
 		gp_st_on_ball_death(st)
 	}
+
 	if st.ball.pos.y > st.board.y_max {
 		gp_st_on_ball_death(st)
 	}
 }
 
-@(private)
 gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 	bar_rectangle := bar_get_rectangle(&st.bar)
 	board_rectangle := board_get_collider_rectangle(&st.board)
@@ -232,7 +237,6 @@ gp_st_handle_collision :: proc(st: ^Gameplay_Struct) {
 			bar_rectangle,
 		); ok {
 			if st.bar.active do bar_heal(&st.bar, 4)
-			// TODO: Bar collision score+ <- needs throttling
 			st.player.score += 10
 
 			st.bar.t_no_col = BAR_COLLISION_THROTTLE
@@ -278,7 +282,7 @@ gp_st_on_ball_death :: proc(st: ^Gameplay_Struct) {
 		}
 	}
 
-	// update state
+	// update game state
 	if st.player.health <= 0 {
 		st.game_state = Game_State_Player_Dead{}
 	} else {
@@ -295,8 +299,9 @@ gp_st_reset_bar_ball :: proc(st: ^Gameplay_Struct) {
 }
 
 gp_st_reset_run :: proc(st: ^Gameplay_Struct) {
-	clear(&st.blocks) // Surely this won't cause problems... right?
 	gp_st_reset_bar_ball(st)
+
+	clear(&st.blocks) // Surely this won't cause problems... right?
 	st.game_state = game_state_aiming_init()
 	st.enemy.health = st.enemy.max_health
 	st.player.health = st.player.max_health
@@ -321,7 +326,6 @@ gp_st_update_player_dead :: proc(st: ^Gameplay_Struct, gs: ^Game_State_Player_De
 gp_st_draw :: proc(st: ^Gameplay_Struct) {
 	bar_rectangle := bar_get_rectangle(&st.bar)
 	board_rectangle := board_get_draw_rectangle(&st.board)
-
 	bar_hit_lerp := st.bar.t_no_col / BAR_COLLISION_THROTTLE
 
 	rl.BeginDrawing()
@@ -341,7 +345,7 @@ gp_st_draw :: proc(st: ^Gameplay_Struct) {
 
 		text := rl.TextFormat("%d", block.health)
 		tx, ty := lib.get_text_pos_rect_origin(text, block.rect, {0.5, 0.5}, 10)
-		rl.DrawText(text, tx, ty, 10, lib.MYWHITE)
+		rl.DrawText(text, tx, ty, 10, lib.MYBLUE)
 	}
 
 
